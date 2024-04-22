@@ -1,0 +1,139 @@
+version: '3'
+
+dotenv: ['.env']
+
+env:
+  GRAFANA_IDS: sim,sim-p0,sim-p1,sim-p2,ps-0,ps-1,ps-2
+  REPOS_PATH: data/go-libp2p-pubsub-repos
+#  PUBSUB_REPO_URL: https://github.com/pancsta/go-libp2p-pubsub
+  PUBSUB_REPO_URL: /home/tob/workspace/opensource/go-libp2p-pubsub
+
+tasks:
+
+  install-deps:
+    cmds:
+      - go mod tidy
+      - go install github.com/pancsta/asyncmachine-go/tools/cmd/am-dbg@latest
+      - pipx install grafanalib
+
+  ###############
+  ##### BENCH
+  ###############
+
+  test-discovery-states:
+    cmds:
+      - pushd $REPOS_PATH/states; go test -test.run "^\QTestSimpleDiscovery" -v *.go
+    dotenv: ['nodebug.env']
+
+  test-discovery-origin:
+    cmds:
+      - pushd $REPOS_PATH/origin; go test -test.run "^\QTestSimpleDiscovery" -v *.go
+    dotenv: ['nodebug.env']
+
+  bench-pdf:
+    cmds:
+      - pandoc -f markdown-implicit_figures bench.md -o assets/bench.pdf
+
+  bench-all:
+    cmds:
+      - go run ./cmd/bench all
+
+  bench-gen-traces:
+    cmds:
+      - go run ./cmd/bench gen-traces origin,states
+
+  bench-gen-results:
+    cmds:
+      - go run ./cmd/bench gen-results origin,states
+
+  bench-gen-charts:
+    cmds:
+      - go run ./cmd/bench gen-charts origin,states
+
+  init-bench-repos:
+    desc: Initializes the benchmark environment, consider running clean-bench-repos first
+    cmds:
+      - task init-bench-repos-clone
+      - task init-bench-repos-init
+
+  init-bench-repos-clone:
+    desc: Clones the go-libp2p-pubsub repos
+    cmds:
+      - |
+        # init
+        mkdir -p {{.REPOS_PATH}}
+        pushd {{.REPOS_PATH}}
+        
+        # origin repo
+        git clone {{.PUBSUB_REPO_URL}} origin
+        pushd origin
+        git checkout psmon-origin
+        popd
+        
+        # states repo
+        git clone {{.PUBSUB_REPO_URL}} states
+        pushd states
+        git checkout psmon-states
+        popd
+        
+        popd
+
+  init-bench-repos-init:
+    desc: Injects pubsub monitor files into the go-libp2p-pubsub repos
+    cmds:
+      - |
+        pushd {{.REPOS_PATH}}/origin
+        cp ../../../bench.env .
+        go mod tidy
+        popd
+        
+        pushd {{.REPOS_PATH}}/states
+        cp ../../../bench.env .
+        go mod tidy
+        popd
+
+  clean-bench-repos:
+    cmds:
+      - rm -rf {{.REPOS_PATH}}
+
+  ###############
+  ##### SIM
+  ###############
+
+  start-sim:
+    desc: Starts the pubsub simulator using the sim.env file
+    cmds:
+      - go run ./cmd/sim
+
+  start-am-dbg:
+    desc: Starts the am-dbg tool for the pubsub simulator
+    cmds:
+      - am-dbg --clean-on-connect
+
+  start-env:
+    desc: Starts the docker environment (prometheus, grafana, pushgateway, jaeger)
+    cmds:
+      - |
+        docker-compose --file config/docker-compose.yml \
+          --project-name go-libp2p-pubsub-benchmark \
+          up -d
+
+  stop-env:
+    desc: Stops the docker environment (prometheus, grafana, pushgateway, jaeger)
+    cmds:
+      - |
+        docker-compose --file config/docker-compose.yml \
+          --project-name go-libp2p-pubsub-benchmark \
+          down
+
+  gen-grafana-dashboard:
+    desc: Generate a Grafana dashboard for the simulator and first 3 hosts
+    dir: scripts
+    cmds:
+      - generate-dashboard --output ../assets/sim-grafana.dashboard.json sim.dashboard.py
+
+  grafana-dashboard-list-panels:
+    desc: List panels and grid positions in a generated dashboard
+    cmds:
+      - |
+        jq '.. | objects | select(has("gridPos")) | {title: .title, gridPos: .gridPos}' assets/sim-grafana.dashboard.json
