@@ -2,7 +2,7 @@
 
 **libp2p-pubsub-benchmark** is a case study and stress test for [asyncmachine-go](http://github.com/pancsta/asyncmachine-go), it's telemetry and integrations. Although it's current purpose is pure research, it may develop over time into something usable.
 
-> **asyncmachine-go** is a general purpose state machine for managing complex asynchronous workflows in a safe and structured way.
+> **asyncmachine-go** is a general purpose state machine for managing complex asynchronous workflows in a safe and structured way
 
 ## libp2p-pubsub benchmark
 
@@ -37,10 +37,16 @@ Configuration file [bench.env](bench.env):
 - `PS_AM_DEBUG` - am-dbg telemetry for pubsub machines
 - `PS_AM_LOG_LEVEL` - AM logging level for pubsub machines (0-4)
 - `PS_AM_LOG_LEVEL_VERBOSE` - AM logging level for verbose pubsub machines (0-4)
-- `PS_TRACING_HOST` - pubsub jaeger tracing (native tracing)
-- `PS_TRACING_AM` - pubsub jaeger tracing (states and transitions)
+- `PS_TRACING_HOST` - pubsub otel tracing (native tracing)
+- `PS_TRACING_AM` - pubsub otel tracing (states and transitions)
 
 See [bench.md](bench.md) for detailed results.
+
+### Benchmark diff
+
+- [go-libp2p-pubsub benchmark integration](https://github.com/libp2p/go-libp2p-pubsub/compare/master...pancsta:go-libp2p-pubsub:psmon-origin)
+  - adds psmon for otel
+  - adds config
 
 ## libp2p-pubsub simulator
 
@@ -78,9 +84,21 @@ Configuration file [sim.env](sim.env):
 
 You can further customize the simulator in [internal/sim/sim.go](internal/sim/sim.go#L46).
 
+### Simulator diff
+
+- [go-libp2p-pubsub asyncmachine-go rewrite](https://github.com/libp2p/go-libp2p-pubsub/compare/master...pancsta:go-libp2p-pubsub:psmon-states)
+- [pubsub state machines](https://github.com/pancsta/go-libp2p-pubsub/tree/psmon-states/states)
+
+Main changes are in the following files:
+
+- pubsub.go
+- comm.go
+- gossipsub.go
+- states files
+
 ## Running
 
-Run these:
+Common setup for all the scenarios:
 
 - `git clone https://github.com/pancsta/go-libp2p-pubsub-benchmark.git`
 - `cd go-libp2p-pubsub-benchmark`
@@ -100,9 +118,9 @@ Run these:
 - switch TTY
 - run `task test-discovery-states`
 - visit the first TTY for am-dbg history
-  - requires `PS_AM_DEBUG`
+  - requires `PS_AM_DEBUG=1`
 - visit http://localhost:16686/ for Jaeger
-  - requires `PS_TRACING_HOST` or `PS_TRACING_AM`
+  - requires `PS_TRACING_HOST=1` or `PS_TRACING_AM=1|2`
 
 ### Simulator
 
@@ -114,25 +132,31 @@ Run these:
 - switch TTY 
 - run `task start-sim`
 - visit the first TTY for am-dbg history
-  - requires `SIM_AM_DEBUG`
+  - requires `SIM_AM_DEBUG=1`
 - visit the Grafana dashboard at http://localhost:3000/d/f4ac0cf1-0f3d-4b41-9e04-d6b0e68b49bc/?orgId=1&refresh=5s&from=now-5m&to=now
-  - requires `SIM_METRICS`
+  - requires `SIM_METRICS=1`
 
-## Diff
+## Benchmarking a custom implementation
 
-See all the changes to `go-libp2p-pubsub` needed to make it work on [asyncmachine-go]().
-
-- **[full diff against libp2p/go-libp2p-pubsub](https://github.com/libp2p/go-libp2p-pubsub/compare/master...pancsta:go-libp2p-pubsub:psmon-states)**
-- [pubsub machines](https://github.com/pancsta/go-libp2p-pubsub/tree/psmon-states/states)
-
-Main changes are in the following files:
-
-- pubsub.go
-- comm.go
-- gossipsub.go
-- states files
+- add your repo to Taskfile.yml
+  - to `init-bench-repos-clone`
+  - to `init-bench-repos-setup`
+  - to `inject-psmon`
+- add an entry to `internal/bench/bench.go/AllVersions`
+- init the env
+  - run `task clean-bench-repos`
+  - run `task init-bench-repos`
+  - run `task inject-psmon`
+- run `task bench-all`
+  - or a specific benchmark step and versions
+  - eg `go run ./cmd/bench gen-traces custom,states`
+- check `assets` for resulting charts
 
 ## TODO
 
+- bind values to states for topics
+  - `internal/sim/states/topic/ss_topic.go`
 - reimplement more things as machines
+  - gossipsub, score, topic
 - fix benchmark failures
+- keep benchmark repos info in one place

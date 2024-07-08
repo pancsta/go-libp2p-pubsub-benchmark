@@ -7,177 +7,26 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"os"
-	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
-	ssp "github.com/pancsta/go-libp2p-pubsub-benchmark/internal/sim/states/peer"
-	ss "github.com/pancsta/go-libp2p-pubsub-benchmark/internal/sim/states/sim"
-	sst "github.com/pancsta/go-libp2p-pubsub-benchmark/internal/sim/states/topic"
-	"github.com/pancsta/go-libp2p-pubsub-benchmark/pkg/psmon"
-
-	"github.com/brianvoe/gofakeit/v7"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pancsta/asyncmachine-go/pkg/history"
 	am "github.com/pancsta/asyncmachine-go/pkg/machine"
 	"github.com/pancsta/asyncmachine-go/pkg/telemetry"
 	amPrometheus "github.com/pancsta/asyncmachine-go/pkg/telemetry/prometheus"
-	"github.com/prometheus/client_golang/prometheus"
+	ssp "github.com/pancsta/go-libp2p-pubsub-benchmark/internal/sim/states/peer"
+	ss "github.com/pancsta/go-libp2p-pubsub-benchmark/internal/sim/states/sim"
 	"github.com/prometheus/client_golang/prometheus/push"
 	"github.com/samber/lo"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/maps"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
+	"sync"
 )
-
-// TODO config file
-
-// config vars
-var (
-	//amLogLevel = am.LogOps
-	//amLogLevel = am.LogDecisions
-	//amLogLevel  = am.LogEverything
-	maxHistoryEntries  = 1000
-	hbFreq             = 1 * time.Second
-	metricsFreq        = 5 * time.Second
-	metricsPrintFreq   = 10 * time.Second
-	discoveryFreq      = 1 * time.Second
-	verifyMsgsDelay    = 100 * time.Millisecond
-	msgDeliveryTimeout = 5 * time.Second
-	peakTopicPeers     = 5
-	defaultFreq        = Freq{D: 0, Up: 0.75, Down: 1.25, Unit: time.Second}
-	printMetrics       = true
-	promUrl            = "http://localhost:9091"
-
-	// start values
-	initialTopics        = 10
-	initialPeers         = 50
-	initialPeersPerTopic = 5
-
-	// limits
-	maxTopics         = 20
-	maxTopicPerPeer   = 15
-	maxPeersPerTopic  = 50
-	maxFriendsPerPeer = 10
-	// buffer size
-	maxMsgsPerPeer = 100
-
-	// sim states frequencies (smaller D happens more often)
-	addRandomFriendFreq  = Freq{D: 2}
-	gcFreq               = Freq{D: 100}
-	joinRandomTopicFreq  = Freq{D: 2}
-	joinFriendsTopicFreq = Freq{D: 4}
-	msgRandomTopicFreq   = Freq{D: 3}
-	addPeerFreq          = Freq{D: 3}
-	removePeerFreq       = Freq{D: 50}
-	addTopicFreq         = Freq{D: 3}
-	removeTopicFreq      = Freq{D: 80}
-	peakRandTopicFreq    = Freq{D: 10}
-)
-
-type Freq struct {
-	// Relative delay (higher is less frequent)
-	D int
-	// up drift
-	Up float64
-	// down drift
-	Down float64
-	// Unit is the delay unit
-	Unit time.Duration
-}
-
-func getStateFreq(state string) (Freq, error) {
-	var freq Freq
-	switch state {
-
-	case ss.AddPeer:
-		freq = addPeerFreq
-	case ss.RemovePeer:
-		freq = removePeerFreq
-	case ss.AddTopic:
-		freq = addTopicFreq
-	case ss.RemoveTopic:
-		freq = removeTopicFreq
-	case ss.PeakRandTopic:
-		freq = peakRandTopicFreq
-	case ss.AddRandomFriend:
-		freq = addRandomFriendFreq
-	case ss.GC:
-		freq = gcFreq
-	case ss.JoinRandomTopic:
-		freq = joinRandomTopicFreq
-	case ss.JoinFriendsTopic:
-		freq = joinFriendsTopicFreq
-	case ss.MsgRandomTopic:
-		freq = msgRandomTopicFreq
-	default:
-		return defaultFreq, fmt.Errorf("no freq for state %s", state)
-	}
-
-	ret := defaultFreq
-	if freq.D != 0 {
-		ret.D = freq.D
-	}
-	if freq.Unit != 0 {
-		ret.Unit = freq.Unit
-	}
-	if freq.Up != 0 {
-		ret.Up = freq.Up
-	}
-	if freq.Down != 0 {
-		ret.Down = freq.Down
-	}
-
-	return ret, nil
-}
-
-///////////////
-///// TOPIC /////
-///////////////
-
-type Topic struct {
-	*am.ExceptionHandler
-
-	sim     *Sim
-	mach    *am.Machine
-	history *history.History
-
-	id    string
-	peers []string
-}
-
-// TODO bind peer info to states
-func newTopic(sim *Sim, name string) (*Topic, error) {
-	mach, err := am.NewCommon(sim.Mach.Ctx, "sim-"+name, sst.States, sst.Names, nil, sim.Mach, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	debugMach(mach)
-	t := &Topic{
-		sim: sim,
-		id:  name,
-	}
-	t.mach = mach
-	t.history = history.Track(mach, sst.Names, maxHistoryEntries)
-
-	return t, nil
-}
-
-///////////////
-///// SIM /////
-///////////////
 
 type Sim struct {
 	*am.ExceptionHandler
@@ -195,17 +44,18 @@ type Sim struct {
 	nextPeerNum int
 	dht         *Peer
 
-	metrics      *Metrics
-	rootSpan     trace.Span
-	metricsProm  *PrometheusMetrics
-	OtelTracer   trace.Tracer
-	OtelProvider *sdktrace.TracerProvider
-	amTracer     *telemetry.OtelMachTracer
-	promPusher   *push.Pusher
-	machMetrics  map[string]*amPrometheus.Metrics
-	promUrl      string
-	discServer   *mockDiscoveryServer
-	MaxPeers     int
+	metrics       *Metrics
+	rootSpan      trace.Span
+	metricsProm   *PrometheusMetrics
+	OtelTracer    trace.Tracer
+	OtelProvider  *sdktrace.TracerProvider
+	amTracer      *telemetry.OtelMachTracer
+	promPusher    *push.Pusher
+	machMetrics   map[string]*amPrometheus.Metrics
+	machMetricsMx sync.Mutex
+	promUrl       string
+	discServer    *mockDiscoveryServer
+	MaxPeers      int
 }
 
 func NewSim(ctx context.Context, exportMetrics, debugAM bool) (*Sim, error) {
@@ -222,10 +72,10 @@ func NewSim(ctx context.Context, exportMetrics, debugAM bool) (*Sim, error) {
 
 	opts := &am.Opts{}
 	// TODO sim tracing?
-	//if traceAM == "1" || traceAM == "2" {
+	// if traceAM == "1" || traceAM == "2" {
 	//	sim.initTracing(ctx)
 	//	sim.traceMach(opts, traceAM == "2")
-	//}
+	// }
 
 	mach, err := am.NewCommon(ctx, "sim", ss.States, ss.Names, sim, nil, opts)
 	if err != nil {
@@ -273,7 +123,10 @@ func (s *Sim) initPrometheus(mach *am.Machine) {
 
 func (s *Sim) bindMachToPrometheus(mach *am.Machine) {
 	mm := amPrometheus.TransitionsToPrometheus(mach, metricsFreq)
+
+	s.machMetricsMx.Lock()
 	s.machMetrics[mach.ID] = mm
+	s.machMetricsMx.Unlock()
 
 	s.promPusher.Collector(mm.StatesAmount)
 	s.promPusher.Collector(mm.RelAmount)
@@ -310,74 +163,21 @@ func (s *Sim) traceMach(opts *am.Opts, traceTransitions bool) {
 	opts.Tracers = []am.Tracer{tracer}
 }
 
-func NewOtelProvider(ctx context.Context) (trace.Tracer, *sdktrace.TracerProvider, error) {
-	otel.SetTextMapPropagator(
-		propagation.NewCompositeTextMapPropagator(
-			propagation.TraceContext{},
-			propagation.Baggage{},
-		))
-
-	exporter, err := otlptrace.New(ctx,
-		otlptracegrpc.NewClient(
-			otlptracegrpc.WithInsecure(),
-			otlptracegrpc.WithEndpoint(psmon.OtelEndpoint),
-		),
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	serviceName := "ps"
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter,
-			sdktrace.WithMaxExportBatchSize(50),
-			sdktrace.WithBatchTimeout(100*time.Millisecond),
-		),
-		sdktrace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(serviceName),
-		)),
-	)
-
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-
-	// Create a named tracer with package path as its name.
-	return otel.Tracer("github.com/libp2p/go-libp2p-pubsub"), tp, nil
-}
-
-func logNoop(format string, args ...any) {
-	// do nothing
-}
-
-func debugMach(mach *am.Machine) {
-	err := telemetry.TransitionsToDBG(mach, "")
-	if err != nil {
-		panic(err)
-	}
-	// dont log to stdout, use the dbg UI instead
-	mach.SetTestLogger(logNoop, EnvLogLevel("SIM_AM_LOG_LEVEL"))
-}
-
-// TODO cookbook, move to pkg/x/helpers.go
-func EnvLogLevel(name string) am.LogLevel {
-	v, _ := strconv.Atoi(os.Getenv(name))
-	return am.LogLevel(v)
-}
-
-// HANDLERS
+// ///// ///// /////
+// ///// HANDLERS
+// ///// ///// /////
 
 func (s *Sim) StartState(e *am.Event) {
 	s.p = message.NewPrinter(language.English)
 
 	// TODO DHT
 	// init a DHT peer, which doesn't take part in the sim as a peer
-	//if err := s.initDHTPeer(); err != nil {
+	// if err := s.initDHTPeer(); err != nil {
 	//	// TODO use AddErr
 	//	s.Mach.Remove1(ss.Start, nil)
 	//	s.Mach.Log("Error creating peer: %s", err)
 	//	return
-	//}
+	// }
 
 	s.discServer = newMockDiscoveryServer()
 
@@ -409,7 +209,7 @@ func (s *Sim) StartState(e *am.Event) {
 				}
 
 				if s.exportMetrics && printMetrics && time.Since(lastMetricsPrint) > metricsPrintFreq {
-					fmt.Println(s.metrics)
+					s.printMetrics()
 					lastMetricsPrint = time.Now()
 				}
 
@@ -469,12 +269,12 @@ func (s *Sim) AddPeerState(e *am.Event) {
 	}
 
 	// TODO automate
-	//addrs := s.getBootstrapNodes(5)
+	// addrs := s.getBootstrapNodes(5)
 	// use DHT as the only bootstrap node
-	//addrs := []peer.AddrInfo{{
+	// addrs := []peer.AddrInfo{{
 	//	ID:    s.dht.host.ID(),
 	//	Addrs: s.dht.host.Addrs(),
-	//}}
+	// }}
 
 	for i := 0; i < amount; i++ {
 		if len(s.peers) >= s.MaxPeers {
@@ -492,7 +292,7 @@ func (s *Sim) AddPeerState(e *am.Event) {
 		// store and start
 		s.peers[p.id] = p
 		// TODO automate
-		//p.bootstrapNodes = addrs
+		// p.bootstrapNodes = addrs
 
 		// peer.Start
 		p.mach.Add1(ssp.Start, nil)
@@ -540,14 +340,17 @@ func (s *Sim) AddTopicState(e *am.Event) {
 		amount = 1
 	}
 
+	// add N topics
 	for i := 0; i < amount; i++ {
 		if len(s.topics) >= maxTopics {
 			break
 		}
+
 		name := randTopicName()
 		if _, ok := s.topics[name]; ok {
 			continue
 		}
+
 		topic, err := newTopic(s, name)
 		if err != nil {
 			s.Mach.AddErr(err)
@@ -555,11 +358,14 @@ func (s *Sim) AddTopicState(e *am.Event) {
 		}
 		s.topics[topic.id] = topic
 
+		// TODO bind topic to peer info
+
 		// add random peers
 		for i := 0; i < initialPeersPerTopic && i < len(s.peers); i++ {
 			p := s.pickRandPeerCond(func(p *Peer) bool {
 				return len(p.simTopics) < maxTopicPerPeer
 			})
+
 			if p == nil {
 				s.Mach.Log("Error: no peer found for topic %s", topic.id)
 				break
@@ -673,7 +479,8 @@ func (s *Sim) JoinRandomTopicEnter(e *am.Event) bool {
 	p := s.pickRandPeer()
 	topic := s.pickRandTopic()
 
-	if p == nil || topic == nil || slices.Contains(p.simTopics, topic.id) || len(topic.peers) >= maxPeersPerTopic {
+	if p == nil || topic == nil || slices.Contains(p.simTopics, topic.id) ||
+		topic.peersCount >= maxPeersPerTopic {
 		return false
 	}
 
@@ -847,27 +654,27 @@ func (s *Sim) PeakRandTopicState(e *am.Event) {
 	s.Mach.Log("Peaking topic: %s", topic.id)
 	// add N random peers into that random topic
 	for i := 0; i < peakTopicPeers; i++ {
-		if len(topic.peers) >= maxPeersPerTopic {
+		if topic.peersCount >= maxPeersPerTopic {
 			break
 		}
 		p := s.pickRandPeer()
 		if p == nil {
 			break
 		}
-		topic.peers = append(topic.peers, p.id)
 		p.mach.Add1(ssp.JoiningTopic, am.A{"Topic.id": topic.id})
 	}
 }
 
-///////////////
-///// METHODS
-///////////////
+// ///// ///// /////
+// ///// METHODS
+// ///// ///// /////
 
 func (s *Sim) RefreshMetricsState(e *am.Event) {
 	s.Mach.Remove1(ss.RefreshMetrics, nil)
 
 	friends := 0
-	joined := 0
+	// joinedTopics := 0
+	topicsPeers := 0
 	conns := 0
 	streams := 0
 	pWithTopics := 0
@@ -879,7 +686,8 @@ func (s *Sim) RefreshMetricsState(e *am.Event) {
 		if len(p.simTopics) > 0 {
 			pWithTopics++
 		}
-		joined += len(p.simTopics)
+		// TODO make sure this equals `topicsPeers` from topics
+		// joinedTopics += len(p.simTopics)
 		for _, conn := range p.host.Network().Conns() {
 			conns++
 			streams += conn.Stat().NumStreams
@@ -891,7 +699,13 @@ func (s *Sim) RefreshMetricsState(e *am.Event) {
 	s.metrics.Streams = streams
 	s.metrics.Friendships = friends / 2
 	s.metrics.PeersWithTopics = pWithTopics
-	s.metrics.PeersPerTopic = joined / max(len(s.topics), 1)
+
+	for _, t := range s.topics {
+		topicsPeers += t.peersCount
+	}
+	if len(s.topics) > 0 {
+		s.metrics.PeersPerTopic = float32(topicsPeers) / float32(len(s.topics))
+	}
 
 	if s.exportMetrics {
 		s.metricsProm.Refresh(s.metrics)
@@ -924,6 +738,7 @@ func (s *Sim) GetReadyPeers() []*Peer {
 
 func (s *Sim) getRandStatesToActive(states []string, history *history.History) []string {
 	var ret []string
+
 	// try to activate each random state according to its (randomized) frequency
 	for _, state := range states {
 		freq, err := getStateFreq(state)
@@ -931,22 +746,25 @@ func (s *Sim) getRandStatesToActive(states []string, history *history.History) [
 			log.Println(err)
 			continue
 		}
+
 		if freq.D == 0 {
 			continue
 		}
 		randModifier := randFloatRange(freq.Down, freq.Up)
 		delay := time.Duration(float64(freq.D) * float64(freq.Unit) * randModifier)
-		//log.Println(s.p.Sprintf(
+		// log.Println(s.p.Sprintf(
 		//	"Delay for %s: %v ms", state, number.Decimal(delay.Milliseconds())))
 		if delay == 0 {
-			log.Println("Ignoring 0 delay for state", state)
+			s.Mach.Log("Ignoring 0 delay for state %s", state)
 			continue
 		}
+
 		if history.ActivatedRecently(state, delay) {
 			continue
 		}
 		ret = append(ret, state)
 	}
+
 	return ret
 }
 
@@ -1001,145 +819,51 @@ func (s *Sim) getBootstrapNodes(amount int) []peer.AddrInfo {
 	return addrs
 }
 
-///////////////
-///// METRICS
-///////////////
+// topicPeerChange is called when a peer joins or leaves a topic. It manipulates
+// topic's states without any mutation or separate topic handlers.
+func (s *Sim) topicPeerChange(topic string, amount int) {
+	s.Mach.Eval("topicPeerChange", func() {
+		t, ok := s.topics[topic]
+		if !ok {
+			s.Mach.Log("Error: topic not found", topic)
+			return
+		}
+		t.peersCount += amount
+		t.IndexesToStates()
+	}, nil)
 
-type Metrics struct {
-	sim             *Sim
-	Peers           int
-	Topics          int
-	PeersWithTopics int
-	Conns           int
-	Streams         int
-	Friendships     int
-	PeersPerTopic   int
-	MsgsMiss        int
-	MsgsRecv        int
+	// TODO re-index the topic on timeout
+	// s.Mach.Add1(ss.TopicIndex, am.A{"topic": topic})
 }
 
-func (m *Metrics) String() string {
-	connsPerPeerAvg := m.Conns / max(m.Peers, 1)
+// topicMsgs is called when a peer sends msgs to a topic.  It manipulates
+// topic's states without any mutation or separate topic handlers.
+func (s *Sim) topicMsgs(topic string, amount int) {
+	s.Mach.Eval("topicPeerChange", func() {
+		t, ok := s.topics[topic]
+		if !ok {
+			s.Mach.Log("Error: topic not found", topic)
+			return
+		}
+		t.msgsLog = append(t.msgsLog, TopicMsgsLog{time.Now(), amount})
+		t.IndexesToStates()
+	}, nil)
 
-	return m.sim.p.Sprintf(
-		"Peers: %d \nTopics: %d \nConnections: %d \nConns / peer: %d \nStreams: %d \nFriendships: %d \nPeers With Topics: %d \nPeersPerTopic: %d \n"+
-			"MsgsMiss: %d \nMsgsRecv: %d\n",
-		m.Peers, m.Topics, m.Conns, connsPerPeerAvg, m.Streams, m.Friendships,
-		m.PeersWithTopics, m.PeersPerTopic, m.MsgsMiss, m.MsgsRecv)
+	// TODO re-index the topic on timeout
+	// s.Mach.Add1(ss.TopicIndex, am.A{"topic": topic})
 }
 
-type PrometheusMetrics struct {
-	Peers           prometheus.Gauge
-	Topics          prometheus.Gauge
-	Connections     prometheus.Gauge
-	Streams         prometheus.Gauge
-	Friendships     prometheus.Gauge
-	PeersWithTopics prometheus.Gauge
-	PeersPerTopic   prometheus.Gauge
-	MsgsMiss        prometheus.Gauge
-	MsgsRecv        prometheus.Gauge
-}
+func (s *Sim) printMetrics() {
+	fmt.Println("Time: " + time.Now().Format("15:04:05"))
+	fmt.Println(s.metrics)
 
-func NewPrometheusMetrics() *PrometheusMetrics {
-	return &PrometheusMetrics{
-		Peers: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "peers",
-			Help:      "Number of peers",
-			Namespace: "sim",
-		}),
-		Topics: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "topics",
-			Help:      "Number of topics",
-			Namespace: "sim",
-		}),
-		Connections: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "connections",
-			Help:      "Number of connections",
-			Namespace: "sim",
-		}),
-		Streams: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "streams",
-			Help:      "Number of streams",
-			Namespace: "sim",
-		}),
-		Friendships: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "friends",
-			Help:      "Number of friendships",
-			Namespace: "sim",
-		}),
-		PeersWithTopics: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "peers_with_topics",
-			Help:      "Number of peers with topics",
-			Namespace: "sim",
-		}),
-		PeersPerTopic: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "peers_per_topic",
-			Help:      "Number of peers per topic",
-			Namespace: "sim",
-		}),
-		MsgsMiss: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "msgs_miss",
-			Help:      "Number of missed messages",
-			Namespace: "sim",
-		}),
-		MsgsRecv: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:      "msgs_recv",
-			Help:      "Number of received messages",
-			Namespace: "sim",
-		}),
+	// list all the topics with peer counts
+	fmt.Println("Topics:")
+	topics := maps.Keys(s.topics)
+	slices.Sort(topics)
+	for _, tid := range topics {
+		t := s.topics[tid]
+		fmt.Printf("  p:%d m:%d %s\n", t.peersCount, len(t.msgsLog), t.id)
 	}
-}
-
-func (pm *PrometheusMetrics) Metrics() []prometheus.Collector {
-	return []prometheus.Collector{
-		pm.Peers,
-		pm.Topics,
-		pm.Connections,
-		pm.Streams,
-		pm.Friendships,
-		pm.PeersWithTopics,
-		pm.PeersPerTopic,
-	}
-}
-
-func (pm *PrometheusMetrics) Refresh(m *Metrics) {
-	pm.Peers.Set(float64(m.Peers))
-	pm.Topics.Set(float64(m.Topics))
-	pm.Connections.Set(float64(m.Conns))
-	pm.Streams.Set(float64(m.Streams))
-	pm.Friendships.Set(float64(m.Friendships))
-	pm.PeersWithTopics.Set(float64(m.PeersWithTopics))
-	pm.PeersPerTopic.Set(float64(m.PeersPerTopic))
-	pm.MsgsMiss.Set(float64(m.MsgsMiss))
-	pm.MsgsRecv.Set(float64(m.MsgsRecv))
-}
-
-func (pm *PrometheusMetrics) Close() {
-	// zero all the metrics
-
-	pm.Peers.Set(0)
-	pm.Topics.Set(0)
-	pm.Connections.Set(0)
-	pm.Streams.Set(0)
-	pm.Friendships.Set(0)
-	pm.PeersWithTopics.Set(0)
-	pm.PeersPerTopic.Set(0)
-	pm.MsgsMiss.Set(0)
-	pm.MsgsRecv.Set(0)
-}
-
-///////////////
-///// HELPERS
-///////////////
-
-var topicRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
-
-func randTopicName() string {
-	name := strings.ToLower(gofakeit.MovieName())
-	name = topicRegex.ReplaceAllString(name, "-")
-	return "t-" + name
-}
-
-func randFloatRange(min, max float64) float64 {
-	return min + rand.Float64()*(max-min)
+	fmt.Print("\n\n")
 }

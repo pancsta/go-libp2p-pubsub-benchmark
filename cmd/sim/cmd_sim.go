@@ -69,13 +69,13 @@ func main() {
 	case <-s.Mach.WhenNot1(ss.Start, nil):
 	}
 
+	// the end
+	println("the end")
+
 	// wait for everything to finish
 	s.Mach.Remove1(ss.Start, nil)
 	s.Mach.Dispose()
-	<-s.Mach.WhenDisposed
-
-	// the end
-	println(s.Mach.Inspect(nil))
+	<-s.Mach.WhenDisposed()
 }
 
 func isMetrics() bool {

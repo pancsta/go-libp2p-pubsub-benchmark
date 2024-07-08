@@ -5,8 +5,7 @@ dotenv: ['.env']
 env:
   GRAFANA_IDS: sim,sim-p0,sim-p1,sim-p2,ps-0,ps-1,ps-2
   REPOS_PATH: data/go-libp2p-pubsub-repos
-#  PUBSUB_REPO_URL: https://github.com/pancsta/go-libp2p-pubsub
-  PUBSUB_REPO_URL: /home/tob/workspace/opensource/go-libp2p-pubsub
+  PUBSUB_REPO_URL: https://github.com/pancsta/go-libp2p-pubsub
 
 tasks:
 
@@ -54,7 +53,7 @@ tasks:
     desc: Initializes the benchmark environment, consider running clean-bench-repos first
     cmds:
       - task init-bench-repos-clone
-      - task init-bench-repos-init
+      - task init-bench-repos-setup
 
   init-bench-repos-clone:
     desc: Clones the go-libp2p-pubsub repos
@@ -78,19 +77,28 @@ tasks:
         
         popd
 
-  init-bench-repos-init:
-    desc: Injects pubsub monitor files into the go-libp2p-pubsub repos
+  init-bench-repos-setup:
+    desc: Injects bench.env into the go-libp2p-pubsub repos
     cmds:
       - |
-        pushd {{.REPOS_PATH}}/origin
-        cp ../../../bench.env .
+        pushd {{.REPOS_PATH}}
+        ln -fn ../../bench.env origin/bench.env
+        ln -fn ../../bench.env states/bench.env
+        
+        pushd origin
         go mod tidy
         popd
         
-        pushd {{.REPOS_PATH}}/states
-        cp ../../../bench.env .
+        pushd states
         go mod tidy
         popd
+
+  inject-psmon:
+    desc: Updates psmon in the go-libp2p-pubsub repos
+    cmds:
+      - |
+        cp assets/pubsub_injects/* {{.REPOS_PATH}}/origin/
+        cp assets/pubsub_injects/* {{.REPOS_PATH}}/states
 
   clean-bench-repos:
     cmds:

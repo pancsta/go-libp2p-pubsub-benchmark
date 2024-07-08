@@ -54,10 +54,15 @@ type PSMon struct {
 
 func NewPSMon(endpoint string, newOtelProvider NewOtelProviderFn) *PSMon {
 
-	// load .env
-	if !strings.HasSuffix(os.Args[0], "sim") {
+	// load bench.env, but not in sim
+	isSim := strings.HasSuffix(os.Args[0], "sim") ||
+		strings.HasSuffix(os.Args[0], "sim_go")
+	if !isSim {
 		_ = godotenv.Load("bench.env", ".env")
 	}
+
+	// load .env
+	_ = godotenv.Load(".env")
 
 	ep := endpoint
 	if ep == "" {
@@ -127,13 +132,13 @@ func (mon *PSMon) SetUpMach(mach *am.Machine, hostNum int) {
 	mach.SetLogArgs(mapper)
 
 	// TODO file log
-	//if mon.IsAMLog() && mon.TLogger != nil {
+	// if mon.IsAMLog() && mon.TLogger != nil {
 	//	mach.SetTestLogger(mon.TLogger, lvl)
-	//} else {
+	// } else {
 	mach.SetTestLogger(func(format string, args ...any) {
 		// do nothing
 	}, lvl)
-	//}
+	// }
 }
 
 // StartTest starts a new test case
@@ -227,7 +232,7 @@ func (mon *PSMon) endTestMain(rootSpan trace.Span, err error, ctx context.Contex
 	mon.LogFile.Close()
 }
 
-///// UTILS
+// /// UTILS
 
 func (mon *PSMon) IsAMDebug() bool {
 	v := os.Getenv("PS_AM_DEBUG")

@@ -26,13 +26,6 @@ import (
 	ssp "github.com/pancsta/go-libp2p-pubsub-benchmark/internal/sim/states/peer"
 )
 
-// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
-const DiscoveryServiceTag = "sim"
-
-///////////////
-///// PEER
-///////////////
-
 type Peer struct {
 
 	// sim and machine
@@ -54,7 +47,7 @@ type Peer struct {
 	key            crypto.PrivKey
 	bootstrapNodes []peer.AddrInfo
 	msgs           []string
-	notifee        *network.NotifyBundle
+	notify         *network.NotifyBundle
 }
 
 func newPeer(sim *Sim, name string, hostNum int) (*Peer, error) {
@@ -122,6 +115,10 @@ func (p *Peer) GenIdentityState(e *am.Event) {
 }
 
 func (p *Peer) StartEnd(e *am.Event) {
+	// leave all the topics
+	for topic := range p.subs {
+		p.mach.Add1(ssp.LeavingTopic, am.A{"Topic.id": topic})
+	}
 	p.mach.Dispose()
 }
 
@@ -171,13 +168,16 @@ func (p *Peer) ConnectingState(e *am.Event) {
 			p.sim.bindMachToPrometheus(p.ps.Mach)
 		}
 
+		// this needs to be set manually when defined in sim.env
+		p.ps.SetLogLevelAM(EnvLogLevel("PS_AM_LOG_LEVEL"))
+
 		// using mock discovery, stop here
 		// TODO config setting
-		// TODO support multiple discoveries at once
+		// TODO support multiple discoveries simultaneously
 		p.mach.Add(am.S{ssp.Ready, ssp.Connected}, nil)
 		return
 
-		//p.setUpDiscoveries(err, h)
+		// p.setUpDiscoveries(err, h)
 	}()
 }
 
@@ -193,14 +193,14 @@ func (p *Peer) setUpDiscoveries(err error, h host.Host) {
 	// set up peer discovery
 	go DHTDiscover(p.mach, h, dhtPeer, DiscoveryServiceTag)
 
-	//setup local mDNS discovery
+	// setup local mDNS discovery
 	if err := setupMDNSDiscovery(h); err != nil {
 		p.mach.AddErr(err)
 		return
 	}
 
 	for _, addr := range p.bootstrapNodes {
-		//p.mach.Log("Connecting to bootstrap node: %s", addr.ID)
+		// p.mach.Log("Connecting to bootstrap node: %s", addr.ID)
 		// connect to the peer
 		if err := h.Connect(p.mach.Ctx, addr); err != nil {
 			p.mach.Log("Failed to connect to peer: %s", err.Error())
@@ -211,7 +211,7 @@ func (p *Peer) setUpDiscoveries(err error, h host.Host) {
 	for _, addr := range h.Addrs() {
 		p.mach.Log("Listening on: %s/p2p/%s", addr, h.ID())
 	}
-	p.notifee = &network.NotifyBundle{
+	p.notify = &network.NotifyBundle{
 		ConnectedF: func(n network.Network, conn network.Conn) {
 
 			// check if dht / bootstrap node
@@ -230,10 +230,10 @@ func (p *Peer) setUpDiscoveries(err error, h host.Host) {
 		DisconnectedF: func(n network.Network, conn network.Conn) {
 			p.mach.Log("Disconnected from %s", conn.RemotePeer())
 			// TODO disconnect on the last peer
-			//p.mach.Add1(ssp.Disconnecting, nil)
+			// p.mach.Add1(ssp.Disconnecting, nil)
 		},
 	}
-	h.Network().Notify(p.notifee)
+	h.Network().Notify(p.notify)
 
 	if p.mach.Is1(ssp.IsDHT) {
 		// DHT is the bootstrap node
@@ -247,6 +247,7 @@ func (p *Peer) EventHostConnectedState(e *am.Event) {
 
 func (p *Peer) JoiningTopicEnter(e *am.Event) bool {
 	topic := e.Args["Topic.id"].(string)
+	// TODO check if already joined
 	return topic != ""
 }
 
@@ -279,8 +280,14 @@ func (p *Peer) JoiningTopicState(e *am.Event) {
 			topic:   topic,
 		}
 
+		// try to add the subscription via the event loop
+		eval := p.mach.Eval("JoiningTopicState", func() { p.subs[topic] = pt }, nil)
+		if !eval {
+			p.mach.AddErrStr("JoiningTopicState")
+			return
+		}
+
 		// start reading messages from the subscription in a loop
-		p.subs[topic] = pt
 		go pt.readLoop()
 		p.mach.Add1(ssp.TopicJoined, e.Args)
 	}()
@@ -288,6 +295,7 @@ func (p *Peer) JoiningTopicState(e *am.Event) {
 
 func (p *Peer) TopicJoinedState(e *am.Event) {
 	p.mach.Remove1(ssp.TopicJoined, nil)
+	go p.sim.topicPeerChange(e.Args["Topic.id"].(string), 1)
 }
 
 func (p *Peer) LeavingTopicEnter(e *am.Event) bool {
@@ -326,6 +334,7 @@ func (p *Peer) LeavingTopicState(e *am.Event) {
 
 func (p *Peer) TopicLeftState(e *am.Event) {
 	p.mach.Remove1(ssp.TopicLeft, nil)
+	go p.sim.topicPeerChange(e.Args["Topic.id"].(string), -1)
 }
 
 func (p *Peer) SendingMsgsEnter(e *am.Event) bool {
@@ -358,12 +367,17 @@ func (p *Peer) SendingMsgsState(e *am.Event) {
 			}
 		}
 
-		p.mach.Add1(ssp.MsgsSent, am.A{"token": token})
+		p.mach.Add1(ssp.MsgsSent, am.A{
+			"Topic.id": tid,
+			"token":    token,
+			"amount":   len(msgs),
+		})
 	}()
 }
 
 func (p *Peer) MsgsSentState(e *am.Event) {
-	p.mach.Remove1(ssp.MsgsSent, nil)
+	p.mach.Remove1(ssp.MsgsSent, e.Args)
+	p.sim.topicMsgs(e.Args["Topic.id"].(string), e.Args["amount"].(int))
 }
 
 func (p *Peer) storeMsg(cm *ChatMessage) {
@@ -375,9 +389,9 @@ func (p *Peer) storeMsg(cm *ChatMessage) {
 	}
 }
 
-///////////////
-///// PEER TOPIC
-///////////////
+// ///// ///// /////
+// ///// PEER TOPIC
+// ///// ///// /////
 
 // ChatMessage gets converted to/from JSON and sent in the body of pubsub messages.
 type ChatMessage struct {
@@ -436,9 +450,9 @@ func (pt *PeerTopic) readLoop() {
 	pt.peer.mach.Log("exiting readLoop...")
 }
 
-///////////////
-///// IDENTITY
-///////////////
+// ///// ///// /////
+// ///// IDENTITY
+// ///// ///// /////
 
 // TODO switch to `identity "github.com/libp2p/go-libp2p-relay-daemon"`
 

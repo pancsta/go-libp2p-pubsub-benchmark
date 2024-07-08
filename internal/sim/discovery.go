@@ -21,9 +21,12 @@ import (
 	am "github.com/pancsta/asyncmachine-go/pkg/machine"
 )
 
-///////////////
-///// Mock Discovery
-///////////////
+// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
+const DiscoveryServiceTag = "sim"
+
+// ///// ///// /////
+// ///// MOCK DISCOVERY
+// ///// ///// /////
 
 type mockDiscoveryServer struct {
 	mx sync.Mutex
@@ -119,9 +122,9 @@ func (d *mockDiscoveryClient) FindPeers(ctx context.Context, ns string, opts ...
 	return d.server.FindPeers(ns, options.Limit)
 }
 
-///////////////
-///// DHT
-///////////////
+// ///// ///// /////
+// ///// DHT
+// ///// ///// /////
 
 // NewDHT attempts to connect to a bunch of bootstrap peers and returns a new DHT.
 // TODO fix initial delay
@@ -205,9 +208,9 @@ func DHTDiscover(mach *am.Machine, h host.Host, dht *dht.IpfsDHT, rendezvous str
 	}
 }
 
-///////////////
-///// mDNS
-///////////////
+// ///// ///// /////
+// ///// MDNS
+// ///// ///// /////
 
 // setupDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.

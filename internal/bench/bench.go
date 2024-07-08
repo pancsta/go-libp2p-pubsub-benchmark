@@ -51,7 +51,7 @@ var (
 	AllVersions = map[string]string{
 		versionOrigin: "origin",
 		versionStates: "states",
-		//versionStatesRPC: "states-rpc",
+		// versionStatesRPC: "states-rpc",
 	}
 	benchmarkDir string
 	startTime    = time.Now()
@@ -82,7 +82,7 @@ type Chart struct {
 }
 
 func isDebug() bool {
-	return os.Getenv("BPS_DEBUG") != ""
+	return os.Getenv("PSB_DEBUG") != ""
 }
 
 func init() {
@@ -153,7 +153,7 @@ func CmdGenTraces(testName string, versions []string) {
 
 		todo := getAllTestCombos()
 
-		log.Printf("Warming up: %d times\n", warmedUps)
+		log.Printf("Warming up %s: %d times\n", ver, warmedUps)
 
 		// warm up the tester
 		for i := 0; i < warmedUps; i++ {
@@ -196,9 +196,9 @@ func ResultsToText(res *Results) string {
 	return ret
 }
 
-///////////////
-///// CHARTS
-///////////////
+// ///// ///// /////
+// ///// CHARTS
+// ///// ///// /////
 
 const labelMsgs = "Num. of sent messages (per host)"
 
@@ -466,7 +466,7 @@ func renderChart(chart Chart, testName string, versions []string, chartsDir stri
 	p.Y.Label.Text = chart.YLabel
 	p.X.Label.Text = chart.XLabel
 	p.Legend.Top = false
-	//pTime.Legend.TextStyle.XAlign = text.XLeft
+	// pTime.Legend.TextStyle.XAlign = text.XLeft
 	// map[ver]map[hosts]XYs
 	verPoints := map[string]map[int]plotter.XYs{}
 	maxVal := 0
@@ -601,7 +601,7 @@ func addLine(version string, p *plot.Plot, hosts int, xys plotter.XYs) error {
 			B: uint8(255 - hosts*10),
 			A: 255,
 		}
-		//line.LineStyle.Dashes = []vg.Length{vg.Points(5), vg.Points(5)}
+		// line.LineStyle.Dashes = []vg.Length{vg.Points(5), vg.Points(5)}
 
 	case versionStates:
 		line.LineStyle.Width = vg.Points(1)
@@ -611,7 +611,7 @@ func addLine(version string, p *plot.Plot, hosts int, xys plotter.XYs) error {
 			B: 255,
 			A: 255,
 		}
-		//line.LineStyle.Dashes = []vg.Length{vg.Points(5), vg.Points(5)}
+		// line.LineStyle.Dashes = []vg.Length{vg.Points(5), vg.Points(5)}
 	}
 
 	p.Add(line)
@@ -620,9 +620,9 @@ func addLine(version string, p *plot.Plot, hosts int, xys plotter.XYs) error {
 	return nil
 }
 
-///////////////
-///// TESTS
-///////////////
+// ///// ///// /////
+// ///// TESTS
+// ///// ///// /////
 
 func CmdParseResults(testName string, versions []string) {
 
