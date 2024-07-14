@@ -154,9 +154,13 @@ Common setup for all the scenarios:
 
 ## TODO
 
-- bind values to states for topics
-  - `internal/sim/states/topic/ss_topic.go`
+- replace `sim.env` and `internal/sim/config.go` with `sim.yml`
+  - allow for env overrides
 - reimplement more things as machines
   - gossipsub, score, topic
 - fix benchmark failures
-- keep benchmark repos info in one place
+- replace `bench.env` and all the benchmark repo defs with `bench.yml`
+  - allow for env overrides
+- bind [universal connectivity UI](https://github.com/libp2p/universal-connectivity/tree/main/go-peer) to see the traffic
+  - needs a list of topics, doesn't need a msg form
+- subtract `time.Sleep()` from benchmark results
