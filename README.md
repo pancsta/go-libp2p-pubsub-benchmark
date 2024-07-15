@@ -126,14 +126,19 @@ Common setup for all the scenarios:
 
 - run `task start-env`
 - run `task start-am-dbg`
-- visit Grafana at http://localhost:3000/dashboard/import 
-  - import `assets/sim-grafana.dashboard.json`
-  - or `task gen-grafana-dashboard` and provide machine IDs via `GRAFANA_IDS`
-- switch TTY 
+- set up Grafana
+  - visit http://localhost:3000/connections/datasources/new
+    - login admin/admin, skip
+    - add a Prometheus data source http://prometheus:9090
+  - visit http://localhost:3000/dashboard/import
+    - login admin/admin, skip
+    - paste import [`assets/sim-grafana.dashboard.json`](https://raw.githubusercontent.com/pancsta/go-libp2p-pubsub-benchmark/main/assets/sim-grafana.dashboard.json)
+      - or `task gen-grafana-dashboard` and provide machine IDs via `GRAFANA_IDS`
+- switch TTY
 - run `task start-sim`
 - visit the first TTY for am-dbg history
   - requires `SIM_AM_DEBUG=1`
-- visit the Grafana dashboard at http://localhost:3000/d/f4ac0cf1-0f3d-4b41-9e04-d6b0e68b49bc/?orgId=1&refresh=5s&from=now-5m&to=now
+- visit the Grafana dashboard
   - requires `SIM_METRICS=1`
 
 ## Benchmarking a custom implementation
@@ -156,11 +161,16 @@ Common setup for all the scenarios:
 
 - replace `sim.env` and `internal/sim/config.go` with `sim.yml`
   - allow for env overrides
+- abstract discovery
+  - fix DHT lag
+  - enable mDNS
 - reimplement more things as machines
   - gossipsub, score, topic
 - fix benchmark failures
+- fix pubsub "Topic not found" err
 - replace `bench.env` and all the benchmark repo defs with `bench.yml`
   - allow for env overrides
 - bind [universal connectivity UI](https://github.com/libp2p/universal-connectivity/tree/main/go-peer) to see the traffic
   - needs a list of topics, doesn't need a msg form
 - subtract `time.Sleep()` from benchmark results
+- "delivered/missed msgs" metrics should also be averaged, not just counters

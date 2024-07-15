@@ -28,6 +28,7 @@ var (
 
 	maxHistoryEntries = 1000
 	maxTopics         = 20
+	maxPeers          = 30
 	maxTopicPerPeer   = 15
 	maxPeersPerTopic  = 10
 	maxFriendsPerPeer = 10

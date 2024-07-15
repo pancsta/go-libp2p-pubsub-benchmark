@@ -56,6 +56,7 @@ type Sim struct {
 	promUrl       string
 	discServer    *mockDiscoveryServer
 	MaxPeers      int
+	MaxTopics     int
 }
 
 func NewSim(ctx context.Context, exportMetrics, debugAM bool) (*Sim, error) {
@@ -67,7 +68,9 @@ func NewSim(ctx context.Context, exportMetrics, debugAM bool) (*Sim, error) {
 		exportMetrics: exportMetrics,
 		promUrl:       promUrl,
 		debugAM:       debugAM,
-		MaxPeers:      30,
+		// config to override
+		MaxPeers:  maxPeers,
+		MaxTopics: maxTopics,
 	}
 
 	opts := &am.Opts{}
@@ -179,6 +182,10 @@ func (s *Sim) StartState(e *am.Event) {
 	//	return
 	// }
 
+	if printMetrics {
+		// TODO print config
+	}
+
 	s.discServer = newMockDiscoveryServer()
 
 	// init the initial simulation
@@ -256,15 +263,14 @@ func (s *Sim) HeartbeatState(e *am.Event) {
 }
 
 func (s *Sim) AddPeerEnter(e *am.Event) bool {
-	_, ok := e.Args["amount"].(int)
-	return ok && len(s.peers) < s.MaxPeers
+	return len(s.peers) < s.MaxPeers
 }
 
 func (s *Sim) AddPeerState(e *am.Event) {
 	s.Mach.Remove1(ss.AddPeer, nil)
 
-	amount := e.Args["amount"].(int)
-	if amount == 0 {
+	amount, ok := e.Args["amount"].(int)
+	if !ok {
 		amount = 1
 	}
 
@@ -329,7 +335,7 @@ func (s *Sim) AddTopicEnter(e *am.Event) bool {
 	p := s.pickRandPeerCond(func(p *Peer) bool {
 		return len(p.simTopics) < maxTopicPerPeer
 	})
-	return len(s.topics) < maxTopics && p != nil
+	return len(s.topics) < s.MaxTopics && p != nil
 }
 
 func (s *Sim) AddTopicState(e *am.Event) {
@@ -342,7 +348,7 @@ func (s *Sim) AddTopicState(e *am.Event) {
 
 	// add N topics
 	for i := 0; i < amount; i++ {
-		if len(s.topics) >= maxTopics {
+		if len(s.topics) >= s.MaxTopics {
 			break
 		}
 
@@ -440,7 +446,6 @@ func (s *Sim) AddRandomFriendState(e *am.Event) {
 		p2.simTopicJoined[randTopic] = time.Now()
 		p2.mach.Add1(ssp.JoiningTopic, am.A{"Topic.id": randTopic})
 	}
-	s.Mach.Log("Added friend: %s + %s", p1.id, p2.id)
 }
 
 // GCState does various periodic cleanups.
@@ -456,6 +461,7 @@ func (s *Sim) GCState(e *am.Event) {
 				s.Mach.Log("Friend not found: %s", fid)
 				continue
 			}
+
 			if len(lo.Intersect(p1.simTopics, p2.simTopics)) > 0 {
 				newFriends = append(newFriends, fid)
 			} else {
@@ -464,6 +470,7 @@ func (s *Sim) GCState(e *am.Event) {
 				s.Mach.Log("Removed friend: %s - %s", p1.id, p2.id)
 			}
 		}
+
 		p1.simFriends = newFriends
 	}
 
@@ -825,7 +832,7 @@ func (s *Sim) topicPeerChange(topic string, amount int) {
 	s.Mach.Eval("topicPeerChange", func() {
 		t, ok := s.topics[topic]
 		if !ok {
-			s.Mach.Log("Error: topic not found", topic)
+			s.Mach.Log("Error: topic not found %s", topic)
 			return
 		}
 		t.peersCount += amount
@@ -842,7 +849,7 @@ func (s *Sim) topicMsgs(topic string, amount int) {
 	s.Mach.Eval("topicPeerChange", func() {
 		t, ok := s.topics[topic]
 		if !ok {
-			s.Mach.Log("Error: topic not found", topic)
+			s.Mach.Log("Error: topic not found %s", topic)
 			return
 		}
 		t.msgsLog = append(t.msgsLog, TopicMsgsLog{time.Now(), amount})

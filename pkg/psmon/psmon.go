@@ -58,7 +58,7 @@ func NewPSMon(endpoint string, newOtelProvider NewOtelProviderFn) *PSMon {
 	isSim := strings.HasSuffix(os.Args[0], "sim") ||
 		strings.HasSuffix(os.Args[0], "sim_go")
 	if !isSim {
-		_ = godotenv.Load("bench.env", ".env")
+		_ = godotenv.Load(".env", "bench.env")
 	}
 
 	// load .env

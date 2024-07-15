@@ -18,7 +18,7 @@ import (
 
 func main() {
 	// load .env
-	_ = godotenv.Load("sim.env", ".env")
+	_ = godotenv.Load(".env", "sim.env")
 
 	// init the simulator
 	ctx := context.Background()
@@ -29,14 +29,20 @@ func main() {
 	}
 
 	// parse max peers
-	maxPeers := 30
 	if os.Getenv("SIM_MAX_PEERS") != "" {
 		v, err := strconv.Atoi(os.Getenv("SIM_MAX_PEERS"))
 		if err == nil {
-			maxPeers = v
+			s.MaxPeers = v
 		}
 	}
-	s.MaxPeers = maxPeers
+
+	// parse max topics
+	if os.Getenv("SIM_MAX_TOPICS") != "" {
+		v, err := strconv.Atoi(os.Getenv("SIM_MAX_TOPICS"))
+		if err == nil {
+			s.MaxTopics = v
+		}
+	}
 
 	// parse duration
 	duration := 5 * time.Minute

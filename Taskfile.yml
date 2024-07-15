@@ -21,13 +21,13 @@ tasks:
 
   test-discovery-states:
     cmds:
-      - pushd $REPOS_PATH/states; go test -test.run "^\QTestSimpleDiscovery" -v *.go
-    dotenv: ['nodebug.env']
+      - pushd $REPOS_PATH/states;
+        go test -test.run "^\QTestSimpleDiscovery" -v *.go
 
   test-discovery-origin:
     cmds:
-      - pushd $REPOS_PATH/origin; go test -test.run "^\QTestSimpleDiscovery" -v *.go
-    dotenv: ['nodebug.env']
+      - pushd $REPOS_PATH/origin;
+        go test -test.run "^\QTestSimpleDiscovery" -v *.go
 
   bench-pdf:
     cmds:
@@ -121,18 +121,23 @@ tasks:
   start-env:
     desc: Starts the docker environment (prometheus, grafana, pushgateway, jaeger)
     cmds:
-      - |
-        docker-compose --file config/docker-compose.yml \
-          --project-name go-libp2p-pubsub-benchmark \
+      - docker-compose --file config/docker-compose.yml
+          --project-name go-libp2p-pubsub-benchmark
           up -d
 
   stop-env:
     desc: Stops the docker environment (prometheus, grafana, pushgateway, jaeger)
     cmds:
-      - |
-        docker-compose --file config/docker-compose.yml \
-          --project-name go-libp2p-pubsub-benchmark \
+      - docker-compose --file config/docker-compose.yml
+          --project-name go-libp2p-pubsub-benchmark
           down
+
+  reset-env:
+    desc: Stops the docker environment (prometheus, grafana, pushgateway, jaeger)
+    cmds:
+      - docker-compose --file config/docker-compose.yml
+          --project-name go-libp2p-pubsub-benchmark
+          down -v
 
   gen-grafana-dashboard:
     desc: Generate a Grafana dashboard for the simulator and first 3 hosts
