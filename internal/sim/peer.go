@@ -259,13 +259,13 @@ func (p *Peer) JoiningTopicState(e *am.Event) {
 	go func() {
 		psTopic, err := p.ps.Join(topic)
 		if err != nil {
-			p.mach.Log("Error: failed to join topic: %s", err)
+			p.mach.Log(`Error:ps: failed to join topic "%s": %s`, topic, err)
 			return
 		}
 
 		psSub, err := psTopic.Subscribe()
 		if err != nil {
-			p.mach.Log("Error: failed to subscribe to topic %s", err)
+			p.mach.Log("Error:topic: failed to subscribe to topic %s", err)
 			return
 		}
 

@@ -335,6 +335,7 @@ func (s *Sim) AddTopicEnter(e *am.Event) bool {
 	p := s.pickRandPeerCond(func(p *Peer) bool {
 		return len(p.simTopics) < maxTopicPerPeer
 	})
+
 	return len(s.topics) < s.MaxTopics && p != nil
 }
 
@@ -364,8 +365,6 @@ func (s *Sim) AddTopicState(e *am.Event) {
 		}
 		s.topics[topic.id] = topic
 
-		// TODO bind topic to peer info
-
 		// add random peers
 		for i := 0; i < initialPeersPerTopic && i < len(s.peers); i++ {
 			p := s.pickRandPeerCond(func(p *Peer) bool {
@@ -381,6 +380,8 @@ func (s *Sim) AddTopicState(e *am.Event) {
 				continue
 			}
 
+			p.simTopics = append(p.simTopics, name)
+			p.simTopicJoined[name] = time.Now()
 			p.mach.Add1(ssp.JoiningTopic, am.A{"Topic.id": topic.id})
 		}
 	}
@@ -685,6 +686,7 @@ func (s *Sim) RefreshMetricsState(e *am.Event) {
 	conns := 0
 	streams := 0
 	pWithTopics := 0
+
 	for _, p := range s.peers {
 		friends += len(p.simFriends)
 		if p.mach.Not1(ssp.Connected) {
@@ -700,6 +702,7 @@ func (s *Sim) RefreshMetricsState(e *am.Event) {
 			streams += conn.Stat().NumStreams
 		}
 	}
+
 	s.metrics.Peers = len(s.peers)
 	s.metrics.Topics = len(s.topics)
 	s.metrics.Conns = conns
@@ -730,6 +733,7 @@ func (s *Sim) GetTopicPeers(topic string) []*Peer {
 			ret = append(ret, p)
 		}
 	}
+
 	return ret
 }
 
@@ -740,6 +744,7 @@ func (s *Sim) GetReadyPeers() []*Peer {
 			ret = append(ret, p)
 		}
 	}
+
 	return ret
 }
 
@@ -781,6 +786,7 @@ func (s *Sim) pickRandPeer() *Peer {
 	if l == 0 {
 		return nil
 	}
+
 	return peers[rand.Intn(l)]
 }
 
@@ -794,6 +800,7 @@ func (s *Sim) pickRandPeerCond(cond func(p *Peer) bool) *Peer {
 	if len(conn) == 0 {
 		return nil
 	}
+
 	return conn[rand.Intn(len(conn))]
 }
 
@@ -802,6 +809,7 @@ func (s *Sim) pickRandTopic() *Topic {
 	if l == 0 {
 		return nil
 	}
+
 	return s.topics[maps.Keys(s.topics)[rand.Intn(l)]]
 }
 
@@ -812,6 +820,7 @@ func (s *Sim) getPeerMach(id string) *am.Machine {
 func (s *Sim) getBootstrapNodes(amount int) []peer.AddrInfo {
 	var addrs []peer.AddrInfo
 	for _, p := range s.peers {
+
 		if p.mach.Not1(ssp.Connected) {
 			continue
 		}
@@ -823,6 +832,7 @@ func (s *Sim) getBootstrapNodes(amount int) []peer.AddrInfo {
 			break
 		}
 	}
+
 	return addrs
 }
 
