@@ -319,8 +319,8 @@ github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYr
 github.com/openzipkin/zipkin-go v0.1.1/go.mod h1:NtoC/o8u3JlF1lSlyPNswIbeQH9bJTmOf0Erfk+hxe8=
 github.com/pancsta/asyncmachine-go v0.6.3 h1:UTYtjF7+gKZsGomiI9Fhnvyo0ac4qB/CJNzIRwdxrm0=
 github.com/pancsta/asyncmachine-go v0.6.3/go.mod h1:hoG7VB315eqgnRvVfZQQcw7B7CrJMkwqNNHH8N+7CGs=
-github.com/pancsta/go-libp2p-pubsub v0.11.4 h1:zQ3tc0pA/28L9j52pClXgHpi7OBgn62+JoZY5IQsSNo=
-github.com/pancsta/go-libp2p-pubsub v0.11.4/go.mod h1:owZ/Fi/draxxvWwljUejC9bTfHwdKqOWd16JirWs058=
+github.com/pancsta/go-libp2p-pubsub v0.11.6 h1:UQCh36mv7lJpUr5MtszRnTmG2PB+DGYZdWZavL1JLa4=
+github.com/pancsta/go-libp2p-pubsub v0.11.6/go.mod h1:vMemwNnQyklHElhtC70rDpTvTtlVx7Xh3K9SR7B9sb4=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 h1:onHthvaw9LFnH4t2DcNVpwGmV9E1BkGknEliJkfwQj0=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58/go.mod h1:DXv8WO4yhMYhSNPKjeNKa5WY9YCIEBRbNzFFPJbWO6Y=
 github.com/pion/datachannel v1.5.6 h1:1IxKJntfSlYkpUj8LlYRSWpYiTTC02nUrOE8T3DqGeg=

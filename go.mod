@@ -8,7 +8,7 @@ require (
 	github.com/libp2p/go-libp2p v0.35.0
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/pancsta/asyncmachine-go v0.6.3
-	github.com/pancsta/go-libp2p-pubsub v0.11.4
+	github.com/pancsta/go-libp2p-pubsub v0.11.6
 	github.com/prometheus/client_golang v1.19.1
 	github.com/samber/lo v1.39.0
 	github.com/sourcegraph/conc v0.3.0
