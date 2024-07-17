@@ -54,15 +54,15 @@ type PSMon struct {
 
 func NewPSMon(endpoint string, newOtelProvider NewOtelProviderFn) *PSMon {
 
+	// load .env
+	_ = godotenv.Load(".env")
+
 	// load bench.env, but not in sim
 	isSim := strings.HasSuffix(os.Args[0], "sim") ||
 		strings.HasSuffix(os.Args[0], "sim_go")
 	if !isSim {
-		_ = godotenv.Load(".env", "bench.env")
+		_ = godotenv.Load("bench.env")
 	}
-
-	// load .env
-	_ = godotenv.Load(".env")
 
 	ep := endpoint
 	if ep == "" {

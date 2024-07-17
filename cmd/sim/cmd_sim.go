@@ -18,7 +18,8 @@ import (
 
 func main() {
 	// load .env
-	_ = godotenv.Load(".env", "sim.env")
+	_ = godotenv.Load(".env")
+	_ = godotenv.Load("sim.env")
 
 	// init the simulator
 	ctx := context.Background()
