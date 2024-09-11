@@ -1,4 +1,4 @@
-package sim
+package topic
 
 import am "github.com/pancsta/asyncmachine-go/pkg/machine"
 

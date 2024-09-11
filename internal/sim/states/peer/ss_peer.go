@@ -1,4 +1,4 @@
-package sim
+package peer
 
 import (
 	am "github.com/pancsta/asyncmachine-go/pkg/machine"
@@ -89,12 +89,12 @@ var States = am.Struct{
 	FwdToSim: {},
 }
 
-//#region boilerplate defs
+// #region boilerplate defs
 
 // Groups of mutually exclusive states.
 var (
 	groupConnected = S{Connecting, Connected, Disconnecting}
-	//groupStarted       = S{Starting, Started}
+	// groupStarted       = S{Starting, Started}
 	groupIdentityReady = S{GenIdentity, IdentityReady}
 )
 
@@ -142,4 +142,4 @@ var Names = S{
 	am.Exception,
 }
 
-//#endregion
+// #endregion

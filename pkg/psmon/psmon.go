@@ -133,7 +133,7 @@ func (mon *PSMon) SetUpMach(mach *am.Machine, hostNum int) {
 
 	// TODO file log
 	// if mon.IsAMLog() && mon.TLogger != nil {
-	//	mach.SetTestLogger(mon.TLogger, lvl)
+	//	mach.SetLoggerSimple(mon.TLogger, lvl)
 	// } else {
 	mach.SetTestLogger(func(format string, args ...any) {
 		// do nothing
@@ -232,7 +232,11 @@ func (mon *PSMon) endTestMain(rootSpan trace.Span, err error, ctx context.Contex
 	mon.LogFile.Close()
 }
 
-// /// UTILS
+// ///// ///// /////
+
+// ///// UTILS
+
+// ///// ///// /////
 
 func (mon *PSMon) IsAMDebug() bool {
 	v := os.Getenv("PS_AM_DEBUG")
@@ -258,7 +262,7 @@ func (mon *PSMon) IsTracingAMTx() bool {
 	return v == "2"
 }
 
-// TODO cookbook, move to pkg/x/helpers.go
+// TODO use helpers.EnvLogLevel
 func (mon *PSMon) EnvLogLevel(name string) am.LogLevel {
 	v, _ := strconv.Atoi(os.Getenv(name))
 	return am.LogLevel(v)
